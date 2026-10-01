@@ -1,14 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const SetPathPopup = ({
   isOpen,
   defaultPath = "./models/ppo_model",
+  defaultTrainSteps = 1000,
   defaultHyperparams = {},
   onConfirm,
   onClose,
 }) => {
   const [path, setPath] = useState(defaultPath);
-  const [device, setDevice] = useState("cuda"); // default gpu = cuda
+  const [device, setDevice] = useState("cuda");
+  const [trainSteps, setTrainSteps] = useState(defaultTrainSteps);
   const [hyperparams, setHyperparams] = useState({
     learning_rate: 0.0003,
     lr_schedule: "constant",
@@ -24,18 +27,27 @@ const SetPathPopup = ({
     model_size: "medium",
   });
   const inputRef = useRef(null);
-  const frozenDefaultRef = useRef(null);
 
-  // reset path when opened & focus the input
   useEffect(() => {
     if (isOpen) {
-      frozenDefaultRef.current = defaultPath; // store the initial value
       setPath(defaultPath);
+      setDevice("cuda");
+      setTrainSteps(defaultTrainSteps);
       setHyperparams((prev) => ({ ...prev, ...defaultHyperparams }));
-      // focus after mount
       setTimeout(() => inputRef.current?.focus(), 0);
     }
-  }, [isOpen, defaultPath, defaultHyperparams]);
+  }, [isOpen, defaultPath, defaultHyperparams, defaultTrainSteps]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
 
   const updateHyperparam = (key, value, cast = Number) => {
     setHyperparams((prev) => ({
@@ -44,23 +56,49 @@ const SetPathPopup = ({
     }));
   };
 
-  // keyboard: Enter confirm, Esc close
   const onKeyDown = (e) => {
-    if (e.key === "Enter") onConfirm?.(path, device, hyperparams);
+    if (e.key === "Enter") onConfirm?.(path, device, trainSteps, hyperparams);
     if (e.key === "Escape") onClose?.();
   };
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="popup-backdrop" onClick={onClose}>
-      <div className="popup-card" onClick={(e) => e.stopPropagation()}>
+      <div className="popup-card popup-card--form" onClick={(e) => e.stopPropagation()}>
         <div className="popup-header">
           <div>Set Training Path</div>
-          <button className="popup-close" onClick={onClose} aria-label="Close">×</button>
+          <button className="popup-close" onClick={onClose} aria-label="Close">x</button>
         </div>
 
-        <div className="popup-body">
+        <div className="popup-body popup-body--scroll">
+          <div className="popup-hero-field">
+            <label className="popup-label popup-label--hero">Training Steps</label>
+            <div className="popup-hero-copy">
+              Set the training budget first. This controls how long the backend PPO run will train before it stops.
+            </div>
+            <div className="popup-hero-controls">
+              <input
+                className="popup-slider popup-slider--hero"
+                type="range"
+                min="1000"
+                max="100000"
+                step="1000"
+                value={trainSteps}
+                onChange={(e) => setTrainSteps(Number(e.target.value))}
+              />
+              <input
+                className="popup-input popup-input--hero-number"
+                type="number"
+                min="1000"
+                max="100000"
+                step="1000"
+                value={trainSteps}
+                onChange={(e) => setTrainSteps(Number(e.target.value))}
+              />
+            </div>
+          </div>
+
           <label className="popup-label">Training output filename</label>
           <input
             ref={inputRef}
@@ -71,21 +109,23 @@ const SetPathPopup = ({
             placeholder={defaultPath}
           />
           <div className="popup-hint">
-            This is a <strong>server</strong> path. Browsers can’t browse your server’s filesystem,
+            This is a <strong>server</strong> path. Browsers can&apos;t browse your server&apos;s filesystem,
             but you can type or paste it here.
           </div>
 
-          <label style={{ display: "block", marginBottom: 6 }}>Training Device</label>
+          <div className="popup-section">
+            <label className="popup-label">Training Device</label>
             <select
-            value={device}
-            onChange={(e) => setDevice(e.target.value === "gpu" ? "cuda" : "cpu")}
-            style={{ width: "100%", marginBottom: 12 }}
+              className="popup-input"
+              value={device}
+              onChange={(e) => setDevice(e.target.value)}
             >
-            <option value="gpu">GPU</option>
-            <option value="cpu">CPU</option>
+              <option value="cuda">GPU</option>
+              <option value="cpu">CPU</option>
             </select>
+          </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+          <div className="popup-grid">
             <div>
               <label className="popup-label">Learning Rate</label>
               <input className="popup-input" type="number" step="0.0001" value={hyperparams.learning_rate} onChange={(e) => updateHyperparam("learning_rate", e.target.value)} />
@@ -147,10 +187,11 @@ const SetPathPopup = ({
 
         <div className="popup-actions">
           <button className="btn secondary" onClick={onClose}>Cancel (Esc)</button>
-          <button className="btn primary" onClick={() => onConfirm?.(path, device, hyperparams)}>Save (Enter)</button>
+          <button className="btn primary" onClick={() => onConfirm?.(path, device, trainSteps, hyperparams)}>Save (Enter)</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

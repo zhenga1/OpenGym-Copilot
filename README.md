@@ -1,5 +1,9 @@
 # OpenGym Copilot
 
+## Try it!
+https://opengym-copilot.onrender.com/
+
+## Introduction
 OpenGym Copilot is a realtime Gymnasium environment viewer for RL experimentation. It separates training from rollout playback, exposes reward shaping controls in the UI, and lets you inspect reward terms while agents are learning.
 
 The project is aimed at a workflow where you can:
@@ -167,6 +171,8 @@ Steps:
 2. In Render, choose `New +` -> `Blueprint` and point it at the GitHub repo.
 3. Render will detect `render.yaml`, build the Docker image, and deploy the app.
 4. Open the generated `https://...onrender.com` URL and the React app should load from the FastAPI server.
+
+The official demo is at the following link: `https://opengym-copilot.onrender.com/`. 
 
 ### Local Production-Style Run
 

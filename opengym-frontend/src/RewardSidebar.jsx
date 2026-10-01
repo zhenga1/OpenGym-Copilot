@@ -9,6 +9,19 @@ function RewardSidebar({
   supportsCustomReward,
   availableRewardVariables,
   rewardFormulaExamples,
+  rewardSourceLinks,
+  savedRewardConfigFiles,
+  selectedRewardConfigFile,
+  rewardConfigSaveName,
+  rewardConfigSaveSourceType,
+  taskGoal,
+  taskProposal,
+  taskProposalLoading,
+  taskProposalStatus,
+  taskProposalLiveStatus,
+  availableBehaviorTags,
+  availableLlms,
+  selectedLlmId,
   latestTrainingBreakdown,
   latestTrainingMeanBreakdown,
   latestRolloutBreakdown,
@@ -17,11 +30,24 @@ function RewardSidebar({
   onAddCustomTerm,
   onRemoveTerm,
   onSaveConfig,
+  onTaskGoalChange,
+  onLlmSelect,
+  onProposeTaskConfig,
+  onApplyTaskProposal,
+  onRewardConfigFileSelect,
+  onRewardConfigSaveNameChange,
+  onRewardConfigSaveSourceTypeChange,
+  onSaveRewardConfigSnapshot,
+  onLoadRewardConfigSnapshot,
 }) {
   const safeRewardConfig = Array.isArray(rewardConfig) ? rewardConfig : [];
   const safeRewardLogs = Array.isArray(rewardLogs) ? rewardLogs : [];
   const safeRewardVariables = Array.isArray(availableRewardVariables) ? availableRewardVariables : [];
   const safeFormulaExamples = Array.isArray(rewardFormulaExamples) ? rewardFormulaExamples : [];
+  const safeRewardSourceLinks = Array.isArray(rewardSourceLinks) ? rewardSourceLinks : [];
+  const safeSavedRewardConfigFiles = Array.isArray(savedRewardConfigFiles) ? savedRewardConfigFiles : [];
+  const safeAvailableBehaviorTags = Array.isArray(availableBehaviorTags) ? availableBehaviorTags : [];
+  const safeAvailableLlms = Array.isArray(availableLlms) ? availableLlms : [];
   const rolloutEntries = Object.entries(latestRolloutBreakdown || {}).filter(([key, value]) => key !== 'total' && Number.isFinite(value));
   const trainingEntries = Object.entries(latestTrainingBreakdown || {}).filter(([key, value]) => key !== 'total' && Number.isFinite(value));
   const fallbackEntries = rolloutEntries.length > 0 ? rolloutEntries : trainingEntries;
@@ -52,6 +78,7 @@ function RewardSidebar({
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const [openSections, setOpenSections] = useState({
     rewardTerms: true,
+    taskProposal: true,
     formulaHelp: false,
     latestTraining: true,
     trainingMean: false,
@@ -71,7 +98,13 @@ function RewardSidebar({
       for (const key of visibleTermKeys) {
         next[key] = prev[key] ?? false;
       }
-      return next;
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      const sameLength = prevKeys.length === nextKeys.length;
+      const sameValues =
+        sameLength &&
+        nextKeys.every((key) => prev[key] === next[key]);
+      return sameValues ? prev : next;
     });
   }, [visibleTermKeys]);
 
@@ -120,25 +153,28 @@ function RewardSidebar({
     width: '360px',
     maxHeight: 'calc(100vh - 32px)',
     overflowY: 'auto',
-    background: 'linear-gradient(180deg, #0f172a, #111827)',
+    background:
+      'radial-gradient(circle at top left, rgba(96,165,250,0.22), transparent 26%), linear-gradient(180deg, rgba(15,23,42,0.96), rgba(15,23,42,0.92))',
     color: '#e5eefb',
-    borderRadius: '16px',
+    borderRadius: '24px',
     padding: '1rem',
-    boxShadow: '0 20px 44px rgba(15, 23, 42, 0.34)',
+    boxShadow: '0 28px 64px rgba(15, 23, 42, 0.34)',
     position: 'fixed',
     left: `${panelPosition.x}px`,
     top: `${panelPosition.y}px`,
     zIndex: 50,
     userSelect: isDragging ? 'none' : 'auto',
-    border: '1px solid rgba(148, 163, 184, 0.18)',
+    border: '1px solid rgba(148, 163, 184, 0.2)',
+    backdropFilter: 'blur(20px)',
   };
 
   const cardStyle = {
     backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    border: '1px solid rgba(148, 163, 184, 0.18)',
-    borderRadius: '12px',
+    border: '1px solid rgba(148, 163, 184, 0.14)',
+    borderRadius: '18px',
     padding: '0.85rem',
     marginTop: '0.9rem',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
   };
 
   const sectionHeaderStyle = {
@@ -210,8 +246,368 @@ function RewardSidebar({
         <div>
           <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>Reward Sidebar</div>
           <div style={{ color: '#93c5fd', fontSize: '0.9rem', marginTop: '0.25rem' }}>{envName}</div>
+          {safeRewardSourceLinks.length > 0 && (
+            <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+              {safeRewardSourceLinks.map((link, index) => (
+                <a
+                  key={link.path || link.label || `reward-source-${index}`}
+                  href={link.path}
+                  style={{
+                    fontSize: '0.75rem',
+                    color: '#bae6fd',
+                    textDecoration: 'none',
+                    padding: '0.2rem 0.5rem',
+                    border: '1px solid rgba(186, 230, 253, 0.25)',
+                    borderRadius: '999px',
+                    backgroundColor: 'rgba(14, 116, 144, 0.18)',
+                  }}
+                >
+                  {link.label}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
         <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>{isDragging ? 'dragging' : 'drag me'}</div>
+      </div>
+
+      <div style={cardStyle}>
+        <button type="button" style={sectionHeaderStyle} onClick={() => toggleSection('taskProposal')}>
+          <span>LLM Task Config</span>
+          <span>{openSections.taskProposal ? '▾' : '▸'}</span>
+        </button>
+        {openSections.taskProposal && (
+          <>
+            <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '0.55rem', lineHeight: 1.45 }}>
+              Describe the behavior you want in natural language. The backend will generate a structured task config proposal and runnable reward terms.
+            </div>
+            <textarea
+              value={taskGoal || ''}
+              onChange={(event) => onTaskGoalChange(event.target.value)}
+              rows={4}
+              placeholder="Example: make the cartpole sway left and right stably at 0.8 Hz while keeping the cart near center."
+              style={{
+                width: '100%',
+                marginTop: '0.65rem',
+                padding: '0.6rem 0.7rem',
+                borderRadius: '10px',
+                border: '1px solid rgba(148, 163, 184, 0.3)',
+                backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                color: '#f8fafc',
+                resize: 'vertical',
+              }}
+            />
+            <div style={{ marginTop: '0.75rem' }}>
+              <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#e2e8f0', marginBottom: '0.4rem' }}>
+                Planner LLM
+              </div>
+              {safeAvailableLlms.length === 0 ? (
+                <div style={{ color: '#94a3b8', fontSize: '0.72rem', lineHeight: 1.4 }}>
+                  Loading LLM providers...
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
+                    {safeAvailableLlms.map((llm) => {
+                      const isSelected = selectedLlmId === llm.id;
+                      const isAvailable = Boolean(llm.available);
+                      const hoverLabel = isAvailable
+                        ? `${llm.label} (${llm.model})`
+                        : llm.missing_reason || `${llm.label} API key not provided.`;
+                      return (
+                        <span key={llm.id} title={hoverLabel} style={{ display: 'inline-flex' }}>
+                        <button
+                          type="button"
+                          disabled={!isAvailable}
+                          onClick={() => isAvailable && onLlmSelect(llm.id)}
+                          style={{
+                            padding: '0.45rem 0.7rem',
+                            borderRadius: '999px',
+                            border: `1px solid ${isSelected ? 'rgba(125, 211, 252, 0.5)' : 'rgba(148, 163, 184, 0.2)'}`,
+                            backgroundColor: !isAvailable
+                              ? 'rgba(71, 85, 105, 0.38)'
+                              : isSelected
+                                ? 'rgba(14, 165, 233, 0.2)'
+                                : 'rgba(255, 255, 255, 0.06)',
+                            color: !isAvailable ? '#94a3b8' : isSelected ? '#bae6fd' : '#e2e8f0',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            cursor: !isAvailable ? 'not-allowed' : 'pointer',
+                            opacity: !isAvailable ? 0.7 : 1,
+                          }}
+                        >
+                          {llm.label}
+                        </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <div style={{ marginTop: '0.35rem', color: '#94a3b8', fontSize: '0.72rem', lineHeight: 1.4 }}>
+                    Unavailable models are dimmed. Hover to see which API key is missing.
+                  </div>
+                </>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '0.55rem', marginTop: '0.7rem' }}>
+              <button
+                type="button"
+                onClick={onProposeTaskConfig}
+                disabled={taskProposalLoading}
+                style={{
+                  flex: 1,
+                  padding: '0.65rem 0.8rem',
+                  borderRadius: '10px',
+                  border: 'none',
+                  backgroundColor: '#6366f1',
+                  color: '#eef2ff',
+                  fontWeight: 700,
+                  cursor: taskProposalLoading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {taskProposalLoading ? 'Generating...' : 'Generate Proposal'}
+              </button>
+              <button
+                type="button"
+                onClick={onApplyTaskProposal}
+                disabled={taskProposalLoading || !taskProposal}
+                style={{
+                  flex: 1,
+                  padding: '0.65rem 0.8rem',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(56, 189, 248, 0.35)',
+                  backgroundColor: taskProposal ? 'rgba(14, 165, 233, 0.18)' : 'rgba(51, 65, 85, 0.65)',
+                  color: taskProposal ? '#bae6fd' : '#94a3b8',
+                  fontWeight: 700,
+                  cursor: taskProposalLoading || !taskProposal ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Apply Proposal
+              </button>
+            </div>
+            <div style={{ marginTop: '0.55rem', color: '#94a3b8', fontSize: '0.8rem' }}>{taskProposalStatus}</div>
+            {taskProposalLiveStatus && (
+              <div
+                style={{
+                  marginTop: '0.55rem',
+                  padding: '0.55rem 0.65rem',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(15, 23, 42, 0.5)',
+                  border: '1px solid rgba(148, 163, 184, 0.12)',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontSize: '0.72rem', color: '#cbd5e1' }}>
+                  Status: <span style={{ color: '#7dd3fc', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>{taskProposalLiveStatus.status || 'unknown'}</span>
+                </div>
+                {taskProposalLiveStatus.model && (
+                  <div style={{ fontSize: '0.72rem', color: '#cbd5e1', marginTop: '0.18rem' }}>
+                    Model: <span style={{ color: '#7dd3fc', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>{taskProposalLiveStatus.model}</span>
+                  </div>
+                )}
+                {taskProposalLiveStatus.base_url && (
+                  <div style={{ fontSize: '0.72rem', color: '#cbd5e1', marginTop: '0.18rem' }}>
+                    Endpoint: <span style={{ color: '#7dd3fc', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>{taskProposalLiveStatus.base_url}</span>
+                  </div>
+                )}
+                <div style={{ fontSize: '0.72rem', color: '#cbd5e1', marginTop: '0.18rem' }}>
+                  Attempt: <span style={{ color: '#7dd3fc', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>{taskProposalLiveStatus.attempt || 0}</span>
+                  {' · '}
+                  Elapsed: <span style={{ color: '#7dd3fc', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>{Number(taskProposalLiveStatus.elapsed_sec || 0).toFixed(1)}s</span>
+                </div>
+              </div>
+            )}
+            {taskProposal && (
+              <div style={{ marginTop: '0.8rem', borderTop: '1px solid rgba(148, 163, 184, 0.12)', paddingTop: '0.75rem', textAlign: 'left' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#e2e8f0' }}>
+                  Proposed By: {taskProposal.provider || 'proposal'} {taskProposal.model ? `(${taskProposal.model})` : ''}
+                </div>
+                {taskProposal.rationale && (
+                  <div style={{ marginTop: '0.45rem', color: '#cbd5e1', fontSize: '0.78rem', lineHeight: 1.45 }}>
+                    {taskProposal.rationale}
+                  </div>
+                )}
+                {taskProposal.success_metric && (
+                  <div style={{ marginTop: '0.55rem', color: '#93c5fd', fontSize: '0.76rem' }}>
+                    Success Metric: {taskProposal.success_metric}
+                  </div>
+                )}
+                {taskProposal.behavior_plan && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#e2e8f0' }}>Behavior Plan</div>
+                    {taskProposal.behavior_plan.rationale && (
+                      <div style={{ marginTop: '0.3rem', color: '#cbd5e1', fontSize: '0.74rem', lineHeight: 1.45 }}>
+                        {taskProposal.behavior_plan.rationale}
+                      </div>
+                    )}
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#86efac' }}>Desired Tags</div>
+                      {Array.isArray(taskProposal.behavior_plan.desired_tags) && taskProposal.behavior_plan.desired_tags.length > 0 ? (
+                        taskProposal.behavior_plan.desired_tags.map((item, index) => (
+                          <div key={`${item.key || 'desired'}-${index}`} style={{ marginTop: '0.3rem', fontSize: '0.72rem', color: '#cbd5e1' }}>
+                            <span style={{ color: '#7dd3fc', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>{item.key}</span>
+                            <span style={{ marginLeft: '0.35rem', color: '#86efac' }}>w={Number(item.weight || 0).toFixed(2)}</span>
+                            {item.reason && <div style={{ color: '#94a3b8', marginTop: '0.08rem' }}>{item.reason}</div>}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ marginTop: '0.25rem', color: '#94a3b8', fontSize: '0.72rem' }}>No desired tags selected.</div>
+                      )}
+                    </div>
+                    <div style={{ marginTop: '0.55rem' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#fdba74' }}>Avoid Tags</div>
+                      {Array.isArray(taskProposal.behavior_plan.avoid_tags) && taskProposal.behavior_plan.avoid_tags.length > 0 ? (
+                        taskProposal.behavior_plan.avoid_tags.map((item, index) => (
+                          <div key={`${item.key || 'avoid'}-${index}`} style={{ marginTop: '0.3rem', fontSize: '0.72rem', color: '#cbd5e1' }}>
+                            <span style={{ color: '#7dd3fc', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>{item.key}</span>
+                            <span style={{ marginLeft: '0.35rem', color: '#fdba74' }}>w={Number(item.weight || 0).toFixed(2)}</span>
+                            {item.reason && <div style={{ color: '#94a3b8', marginTop: '0.08rem' }}>{item.reason}</div>}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ marginTop: '0.25rem', color: '#94a3b8', fontSize: '0.72rem' }}>No avoid tags selected.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {(Array.isArray(taskProposal.available_behavior_tags) ? taskProposal.available_behavior_tags : safeAvailableBehaviorTags).length > 0 && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#e2e8f0' }}>Available Behavior Tags</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.45rem' }}>
+                      {(Array.isArray(taskProposal.available_behavior_tags) ? taskProposal.available_behavior_tags : safeAvailableBehaviorTags).map((tag, index) => (
+                        <span
+                          key={`${tag.key || 'available-tag'}-${index}`}
+                          style={{
+                            padding: '0.18rem 0.45rem',
+                            borderRadius: '999px',
+                            backgroundColor: tag.polarity === 'avoid' ? 'rgba(251, 191, 36, 0.12)' : 'rgba(14, 165, 233, 0.12)',
+                            border: '1px solid rgba(148, 163, 184, 0.18)',
+                            color: '#e2e8f0',
+                            fontSize: '0.68rem',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {tag.key}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {Array.isArray(taskProposal.task_params) && taskProposal.task_params.length > 0 && (
+                  <div style={{ marginTop: '0.7rem' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#e2e8f0' }}>Task Parameters</div>
+                    {taskProposal.task_params.map((param, index) => (
+                      <div key={param.key || `task-param-${index}`} style={{ marginTop: '0.35rem', fontSize: '0.74rem', color: '#cbd5e1' }}>
+                        <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, monospace', color: '#7dd3fc' }}>{param.key}</span>
+                        {' = '}
+                        <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>{String(param.value)}</span>
+                        <div style={{ color: '#94a3b8', marginTop: '0.08rem' }}>{param.description}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {Array.isArray(taskProposal.derived_signals) && taskProposal.derived_signals.length > 0 && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#e2e8f0' }}>Derived Signals</div>
+                    {taskProposal.derived_signals.map((signal, index) => (
+                      <div key={signal.key || `derived-signal-${index}`} style={{ marginTop: '0.35rem' }}>
+                        <div style={{ fontSize: '0.74rem', color: '#7dd3fc', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>
+                          {signal.key}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#cbd5e1', fontFamily: 'ui-monospace, SFMono-Regular, monospace', marginTop: '0.08rem' }}>
+                          {signal.expression}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.08rem' }}>
+                          {signal.description}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {Array.isArray(taskProposal.reward_terms) && taskProposal.reward_terms.length > 0 && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#e2e8f0' }}>Proposed Reward Terms</div>
+                    {taskProposal.reward_terms.map((term, index) => (
+                      <div key={term.key || `proposal-reward-term-${index}`} style={{ marginTop: '0.4rem' }}>
+                        <div style={{ fontSize: '0.74rem', color: '#e2e8f0' }}>
+                          {term.label || term.key}
+                          <span style={{ marginLeft: '0.45rem', color: '#7dd3fc', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>
+                            w={Number(term.weight || 0).toFixed(2)}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#cbd5e1', fontFamily: 'ui-monospace, SFMono-Regular, monospace', marginTop: '0.08rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                          {term.expression}
+                        </div>
+                        {term.description && (
+                          <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.08rem', lineHeight: 1.45 }}>
+                            {term.description}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {Array.isArray(taskProposal.warnings) && taskProposal.warnings.length > 0 && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fca5a5' }}>Warnings</div>
+                    {taskProposal.warnings.map((warning, index) => (
+                      <div key={`${warning}-${index}`} style={{ marginTop: '0.25rem', fontSize: '0.72rem', color: '#fecaca', lineHeight: 1.4 }}>
+                        {warning}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(taskProposal.model_proposal_preview || taskProposal.raw_model_response) && (
+                  <div style={{ marginTop: '0.85rem' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fcd34d' }}>Model Output Preview</div>
+                    {taskProposal.llm_error_stage && (
+                      <div style={{ marginTop: '0.22rem', fontSize: '0.7rem', color: '#fde68a' }}>
+                        Failed stage: {taskProposal.llm_error_stage}
+                      </div>
+                    )}
+                    {taskProposal.model_proposal_preview && (
+                      <pre
+                        style={{
+                          marginTop: '0.35rem',
+                          fontSize: '0.68rem',
+                          color: '#e2e8f0',
+                          backgroundColor: 'rgba(15, 23, 42, 0.5)',
+                          border: '1px solid rgba(148, 163, 184, 0.14)',
+                          borderRadius: '0.6rem',
+                          padding: '0.55rem',
+                          whiteSpace: 'pre-wrap',
+                          overflowWrap: 'anywhere',
+                          maxHeight: '11rem',
+                          overflowY: 'auto',
+                        }}
+                      >
+                        {JSON.stringify(taskProposal.model_proposal_preview, null, 2)}
+                      </pre>
+                    )}
+                    {taskProposal.raw_model_response && (
+                      <pre
+                        style={{
+                          marginTop: '0.35rem',
+                          fontSize: '0.68rem',
+                          color: '#cbd5e1',
+                          backgroundColor: 'rgba(15, 23, 42, 0.5)',
+                          border: '1px solid rgba(148, 163, 184, 0.14)',
+                          borderRadius: '0.6rem',
+                          padding: '0.55rem',
+                          whiteSpace: 'pre-wrap',
+                          overflowWrap: 'anywhere',
+                          maxHeight: '11rem',
+                          overflowY: 'auto',
+                        }}
+                      >
+                        {taskProposal.raw_model_response}
+                      </pre>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <div style={cardStyle}>
@@ -330,25 +726,27 @@ function RewardSidebar({
                               }}
                             />
                           </div>
-                          <div style={{ marginTop: '0.55rem' }}>
-                            <div style={{ color: '#cbd5e1', fontSize: '0.8rem', marginBottom: '0.25rem' }}>Expression</div>
-                            <textarea
-                              value={term.expression || ''}
-                              onChange={(event) => onTermChange(term.key, 'expression', event.target.value, term)}
-                              rows={3}
-                              style={{
-                                width: '100%',
-                                padding: '0.5rem 0.6rem',
-                                borderRadius: '8px',
-                                border: '1px solid rgba(148, 163, 184, 0.3)',
-                                backgroundColor: 'rgba(15, 23, 42, 0.65)',
-                                color: '#f8fafc',
-                                resize: 'vertical',
-                              }}
-                            />
-                          </div>
                         </>
                       )}
+                      <div style={{ marginTop: '0.55rem' }}>
+                        <div style={{ color: '#cbd5e1', fontSize: '0.8rem', marginBottom: '0.25rem' }}>Expression</div>
+                        <textarea
+                          value={term.expression || ''}
+                          onChange={(event) => onTermChange(term.key, 'expression', event.target.value, term)}
+                          rows={3}
+                          style={{
+                            width: '100%',
+                            padding: '0.5rem 0.6rem',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(148, 163, 184, 0.3)',
+                            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                            color: '#f8fafc',
+                            resize: 'vertical',
+                            fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                            fontSize: '0.8rem',
+                          }}
+                        />
+                      </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.55rem' }}>
                         <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>Weight</span>
                         <input
@@ -411,6 +809,100 @@ function RewardSidebar({
             <div style={{ marginTop: '0.55rem', color: '#94a3b8', fontSize: '0.8rem' }}>{rewardConfigStatus}</div>
 
             <div style={{ marginTop: '0.8rem', borderTop: '1px solid rgba(148, 163, 184, 0.12)', paddingTop: '0.8rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#e2e8f0' }}>Save / Load Reward Config</div>
+              <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginTop: '0.35rem', lineHeight: 1.4 }}>
+                Save the current reward definition separately from the policy checkpoint, then reload it later to restore the matching breakdown logic.
+              </div>
+              <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.6rem' }}>
+                <input
+                  type="text"
+                  value={rewardConfigSaveName || ''}
+                  onChange={(event) => onRewardConfigSaveNameChange(event.target.value)}
+                  placeholder="cartpole_sway_llm.json"
+                  style={{
+                    flex: 1,
+                    padding: '0.45rem 0.55rem',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(148, 163, 184, 0.3)',
+                    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                    color: '#f8fafc',
+                  }}
+                />
+                <select
+                  value={rewardConfigSaveSourceType || 'manual'}
+                  onChange={(event) => onRewardConfigSaveSourceTypeChange(event.target.value)}
+                  style={{
+                    width: '110px',
+                    padding: '0.45rem 0.5rem',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(148, 163, 184, 0.3)',
+                    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                    color: '#f8fafc',
+                  }}
+                >
+                  <option value="manual">manual</option>
+                  <option value="llm">llm</option>
+                  <option value="heuristic">heuristic</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.55rem' }}>
+                <button
+                  type="button"
+                  onClick={onSaveRewardConfigSnapshot}
+                  disabled={rewardConfigLoading}
+                  style={{
+                    flex: 1,
+                    padding: '0.55rem 0.8rem',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(125, 211, 252, 0.28)',
+                    backgroundColor: 'rgba(14, 165, 233, 0.18)',
+                    color: '#bae6fd',
+                    fontWeight: 700,
+                    cursor: rewardConfigLoading ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Save Config
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: '0.45rem', marginTop: '0.55rem' }}>
+                <select
+                  value={selectedRewardConfigFile || ''}
+                  onChange={(event) => onRewardConfigFileSelect(event.target.value)}
+                  style={{
+                    flex: 1,
+                    padding: '0.45rem 0.55rem',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(148, 163, 184, 0.3)',
+                    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                    color: '#f8fafc',
+                  }}
+                >
+                  <option value="">Select saved reward config</option>
+                  {safeSavedRewardConfigFiles.map((fileName, index) => (
+                    <option key={fileName || `saved-reward-config-${index}`} value={fileName}>{fileName}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={onLoadRewardConfigSnapshot}
+                  disabled={rewardConfigLoading || !selectedRewardConfigFile}
+                  style={{
+                    width: '96px',
+                    padding: '0.55rem 0.8rem',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(74, 222, 128, 0.28)',
+                    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                    color: '#bbf7d0',
+                    fontWeight: 700,
+                    cursor: rewardConfigLoading || !selectedRewardConfigFile ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Load
+                </button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '0.8rem', borderTop: '1px solid rgba(148, 163, 184, 0.12)', paddingTop: '0.8rem' }}>
               <button type="button" style={sectionHeaderStyle} onClick={() => toggleSection('formulaHelp')}>
                 <span>Formula Variables</span>
                 <span>{openSections.formulaHelp ? '▾' : '▸'}</span>
@@ -422,9 +914,9 @@ function RewardSidebar({
                   </div>
                   {safeFormulaExamples.length > 0 && (
                     <div style={{ marginTop: '0.55rem' }}>
-                      {safeFormulaExamples.map((example) => (
+                      {safeFormulaExamples.map((example, index) => (
                         <div
-                          key={example}
+                          key={example || `formula-example-${index}`}
                           style={{
                             fontFamily: 'ui-monospace, SFMono-Regular, monospace',
                             fontSize: '0.75rem',
@@ -438,21 +930,33 @@ function RewardSidebar({
                     </div>
                   )}
                   <div style={{ marginTop: '0.55rem', maxHeight: '180px', overflowY: 'auto' }}>
-                    {safeRewardVariables.map((variable) => (
+                    {safeRewardVariables.map((variable, index) => (
                       <div
-                        key={variable.name}
+                        key={variable.name || variable.display_name || `reward-variable-${index}`}
                         style={{
                           borderTop: '1px solid rgba(148, 163, 184, 0.08)',
                           padding: '0.35rem 0',
                           textAlign: 'left',
                         }}
                       >
-                        <div style={{ fontSize: '0.78rem', color: '#e2e8f0', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>
-                          {variable.name}
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.45rem', flexWrap: 'wrap' }}>
+                          <div style={{ fontSize: '0.78rem', color: '#e2e8f0', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>
+                            {variable.name}
+                          </div>
+                          {variable.display_name && variable.display_name !== variable.name && (
+                            <div style={{ fontSize: '0.72rem', color: '#7dd3fc', fontFamily: 'ui-monospace, SFMono-Regular, monospace' }}>
+                              {variable.display_name}
+                            </div>
+                          )}
                         </div>
                         <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
                           {variable.description}
                         </div>
+                        {Array.isArray(variable.aliases) && variable.aliases.length > 0 && (
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '0.16rem' }}>
+                            Aliases: {variable.aliases.join(', ')}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
